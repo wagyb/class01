@@ -1,57 +1,3 @@
-//#include <GL/glew.h>
-//#include <GL/glut.h>
-//#include <math.h>
-//#include <iostream>
-//
-//// DDA核心绘制函数（GLUT渲染回调）
-//void display() {
-//    glClearColor(0.1f, 0.3f, 0.1f, 1.0f);
-//
-//    glClear(GL_COLOR_BUFFER_BIT);
-//
-//    // 固定管线设置
-//    glColor3f(1.0f, 0.0f, 0.0f); // 红色
-//    glPointSize(2.0f);            // 点大小
-//
-//    // DDA算法核心
-//    int x1=100,y1=100,x2=700,y2=500,dx=x2-x1,dy=y2-y1;
-//    int s=abs(dx)>abs(dy)?abs(dx):abs(dy);
-//    float xi=(float)dx/s,yi=(float)dy/s,x=x1,y=y1;
-//
-//    // 固定管线绘制点
-//    glBegin(GL_POINTS);
-//    for (int i = 0; i <= s; i++) { glVertex2f((int)round(x), (int)round(y)); x += xi; y += yi; std::cout << x << " " << y << std::endl; }
-//    glEnd();
-//
-//    glFlush(); // GLUT刷新缓冲区
-//}
-//
-//int main(int argc, char** argv) {
-//    // 初始化GLUT
-//    glutInit(&argc, argv);
-//    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
-//    glutInitWindowSize(800, 600);
-//    glutCreateWindow("DDA (GLUT+GLEW)");
-//
-//
-//
-//    // 设置正交投影（适配像素坐标）
-//    glMatrixMode(GL_PROJECTION);
-//    glLoadIdentity();
-//    glOrtho(0, 800, 0, 600, -1, 1);
-//    glMatrixMode(GL_MODELVIEW);
-//
-//    // 注册渲染回调
-//    glutDisplayFunc(display);
-//    // 启动GLUT主循环
-//    glutMainLoop();
-//
-//    return 0;
-//}
-
-
-
-
 #include <iostream>
 #include <GL/glew.h>
 #include <GL/glut.h>
@@ -66,10 +12,11 @@
 #define WINDOW_HEIGHT 800  // 窗口高度 = 网格行数 × 网格尺寸
 #define CELL_SIZE 10       // 每个网格的像素尺寸（800/80=10）
 
-// 记录网格是否被直线穿过
+
 bool grid_occupied[GRID_ROWS][GRID_COLS] = { false };
-// 直线端点（像素坐标）
+
 int x1 = 50, y1_pixel = 50, x2 = 750, y2 = 550;
+
 
 
 // 重置网格状态
@@ -119,7 +66,6 @@ void dda_grid_trace(int x1,int y1,int x2,int y2) {
         current_grid_y += y_inc;
     }
 }
-
 void mid_point_trace(int x1, int y1, int x2, int y2) {
     reset_grid(); // 先清空之前的标记
 
@@ -174,7 +120,6 @@ void mid_point_trace(int x1, int y1, int x2, int y2) {
 
     }
 }
-
 void Bresenham_trace(int x1, int y1, int x2, int y2)
 {
     reset_grid(); // 先清空之前的标记
@@ -238,6 +183,8 @@ void Bresenham_trace(int x1, int y1, int x2, int y2)
     // 迭代追踪穿过的网格
    
 }
+
+
 void Bresenham_circle(int cx, int cy, int r)
 {
     reset_grid(); // 先清空之前的标记（和你的画线函数一致）
@@ -251,6 +198,7 @@ void Bresenham_circle(int cx, int cy, int r)
     if (grid_r == 0) {
         if (center_col >= 0 && center_col < GRID_COLS && center_row >= 0 && center_row < GRID_ROWS) {
             grid_occupied[center_row][center_col] = true;
+
         }
         printf("Step 0: Grid(%d, %d) (圆心，半径0)\n", center_col, center_row);
         return;
@@ -298,8 +246,23 @@ void Bresenham_circle(int cx, int cy, int r)
 }
 
 
+void scanline_fill(int row0, int row1) {
+    for (int row = row0+1; row < row1; row++) {
+        int count = 0; 
+        for (int col = 0; col < GRID_COLS; col++) {
+            
+            if (grid_occupied[row][col] && !grid_occupied[row][col+1]) {
+                count = 1 - count;
+            }
+            else if (count == 1) {
+                grid_occupied[row][col] = true;
+            }
+        }
+    }
+}
 
-// 绘制网格和直线
+
+
 void display() {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -353,7 +316,8 @@ void init() {
     glMatrixMode(GL_MODELVIEW);
 
     // 执行DDA网格追踪
-    Bresenham_circle(400, 400, 390);
+    Bresenham_trace(400, 400, 400, 700);
+    //scanline_fill(1 , 79);
 }
 
 int main(int argc, char** argv) {
@@ -364,9 +328,9 @@ int main(int argc, char** argv) {
 
 
     init();
-
     glutDisplayFunc(display);
     glutMainLoop();
+
 
     return 0;
 }

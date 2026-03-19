@@ -1,0 +1,212 @@
+// 静态 GLEW 必需：定义宏（放在所有头文件前）
+#define GLEW_STATIC
+#include <iostream>
+// GLEW 2.3.1 头文件（必须在 GLUT 之前包含）
+#include <GL/glew.h>
+// 老版本 GLUT 头文件（兼容 glut.h）
+#include <GL/glut.h>
+
+// 窗口参数
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 600;
+// 着色器程序 ID（适配老版本 OpenGL）
+GLuint shaderProgram;
+GLuint VAO;
+
+// 检查着色器编译错误（兼容老版本 GLEW 函数）
+void checkShaderError(GLuint shader, const char* type) {
+	GLint success;
+	GLchar infoLog[512];
+	if (strcmp(type, "PROGRAM") != 0) {
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+		if (!success) {
+			glGetShaderInfoLog(shader, 512, NULL, infoLog);
+			std::cerr << "? 着色器编译失败 (" << type << "):\n" << infoLog << std::endl;
+		}
+	}
+	else {
+		glGetProgramiv(shader, GL_LINK_STATUS, &success);
+		if (!success) {
+			glGetProgramInfoLog(shader, 512, NULL, infoLog);
+			std::cerr << "? 着色器程序链接失败:\n" << infoLog << std::endl;
+		}
+	}
+}
+
+// 初始化 GLEW + OpenGL + 老版本 GLUT
+void init() {
+	// --------------------------
+	// 1. 初始化 GLEW（核心验证）
+	// --------------------------
+	glewExperimental = GL_TRUE;
+	GLenum glewStatus = glewInit();
+	if (glewStatus != GLEW_OK) {
+		std::cerr << "? GLEW 2.3.1 初始化失败：" << glewGetErrorString(glewStatus) << std::endl;
+		exit(EXIT_FAILURE);
+	}
+	std::cout << "? GLEW 2.3.1 初始化成功！" << std::endl;
+	std::cout << "   - GLEW 版本：" << glewGetString(GLEW_VERSION) << std::endl;
+	std::cout << "   - OpenGL 版本：" << glGetString(GL_VERSION) << std::endl;
+
+	// --------------------------
+	// 新增：输出 GLUT/FreeGLUT 版本信息（兼容新旧版本）
+	// --------------------------
+	std::cout << "\n?? GLUT 版本信息：" << std::endl;
+	// 方式1：FreeGLUT 专用（返回版本号整数，如 300 表示 3.0.0）
+#ifdef FREEGLUT_VERSION_2_8
+	int glutVersion = glutGet(GLUT_VERSION);
+	int major = glutVersion / 100;
+	int minor = (glutVersion % 100) / 10;
+	int patch = glutVersion % 10;
+	std::cout << "   - FreeGLUT 版本：" << major << "." << minor << "." << patch << std::endl;
+	// 方式2：标准 GLUT（无版本函数，输出宏定义或通用信息）
+#else
+#ifdef GLUT_API_VERSION
+	std::cout << "   - 标准 GLUT 版本：" << GLUT_API_VERSION << "（宏定义）" << std::endl;
+#else
+	std::cout << "   - 标准 GLUT 版本：未知（老版本无版本宏），但环境配置正常" << std::endl;
+#endif
+#endif
+
+	// --------------------------
+	// 2. 编译兼容老版本 OpenGL 的着色器（关键！）
+	// --------------------------
+	// 顶点着色器：改用 #version 120（老版本 GLUT 兼容）
+	const char* vertexShaderSource = R"(
+        #version 120
+        attribute vec3 aPos; // 老版本用 attribute 而非 layout(location)
+        void main() {
+            gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        }
+    )";
+	// 片段着色器：改用 #version 120
+	const char* fragmentShaderSource = R"(
+        #version 120
+        void main() {
+            gl_FragColor = vec4(0.8f, 0.2f, 0.8f, 1.0f); // 老版本用 gl_FragColor
+        }
+    )";
+
+	// 编译顶点着色器
+	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(vertexShader);
+	checkShaderError(vertexShader, "VERTEX");
+
+	// 编译片段着色器
+	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(fragmentShader);
+	checkShaderError(fragmentShader, "FRAGMENT");
+
+	// 链接着色器程序
+	shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+	checkShaderError(shaderProgram, "PROGRAM");
+
+	// 删除临时着色器
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+
+	// --------------------------
+	// 3. 创建顶点数据（兼容老版本 VAO/VBO）
+	// --------------------------
+	float triangleVertices[] = {
+		-0.7f, -0.7f, 0.0f, // 左下
+		0.7f, -0.7f, 0.0f, // 右下
+		0.0f, 0.7f, 0.0f  // 顶部
+	};
+
+	GLuint VBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
+
+	// 老版本 OpenGL：用 glBindAttribLocation 绑定顶点属性（替代 layout(location)）
+	glBindAttribLocation(shaderProgram, 0, "aPos");
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	// 解绑
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+	// --------------------------
+	// 4. 老版本 GLUT OpenGL 初始化
+	// --------------------------
+	glClearColor(0.1f, 0.1f, 0.2f, 1.0f); // 深紫色背景
+}
+
+// 老版本 GLUT 渲染回调
+void display() {
+	// 清空缓冲区
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// 使用着色器程序绘制
+	glUseProgram(shaderProgram);
+	glBindVertexArray(VAO);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+	// 老版本 GLUT 双缓冲交换（必需）
+	glutSwapBuffers();
+}
+
+// 老版本 GLUT 窗口大小调整回调
+void reshape(int width, int height) {
+	glViewport(0, 0, width, height);
+	// 老版本 OpenGL：手动设置投影矩阵
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0); // 正交投影（兼容老版本）
+	glMatrixMode(GL_MODELVIEW);
+}
+
+// 老版本 GLUT 键盘回调（ESC 退出）
+void keyboard(unsigned char key, int x, int y) {
+	if (key == 27) { // ESC 键
+		std::cout << "\n? GLEW + 老版本 GLUT 联合测试完成，程序退出！" << std::endl;
+		exit(EXIT_SUCCESS);
+	}
+}
+
+// 主函数（适配老版本 GLUT）
+int main(int argc, char** argv) {
+	// --------------------------
+	// 1. 初始化老版本 GLUT（移除不兼容函数）
+	// --------------------------
+	glutInit(&argc, argv);
+	// 仅保留老版本支持的显示模式
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
+	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+	// 创建窗口（老版本 GLUT 核心接口）
+	glutCreateWindow("GLEW 2.3.1 + 老版本 GLUT 联合测试（VS2013）");
+
+	// --------------------------
+	// 2. 初始化 GLEW + OpenGL
+	// --------------------------
+	init();
+
+	// --------------------------
+	// 3. 注册老版本 GLUT 回调函数
+	// --------------------------
+	glutDisplayFunc(display);
+	glutReshapeFunc(reshape);
+	glutKeyboardFunc(keyboard);
+	glutIdleFunc(display); // 空闲刷新
+
+	// 打印提示
+	std::cout << "\n=== GLEW + 老版本 GLUT 联合测试 ===" << std::endl;
+	std::cout << "窗口已创建，按 ESC 键退出！" << std::endl;
+
+	// --------------------------
+	// 4. 进入老版本 GLUT 主循环
+	// --------------------------
+	glutMainLoop();
+
+	return 0;
+}

@@ -1,0 +1,108 @@
+// 静态库必需：定义 GLEW_STATIC 宏（放在头文件前）
+#define GLEW_STATIC
+#include <iostream>
+#include <windows.h>
+// GLEW 2.3.1 头文件
+#include <GL/glew.h>
+
+// 适配 VS2013：使用多字节字符集（ANSI）
+HGLRC createOpenGLContext(HDC& hDC, HGLRC& hRC) {
+	WNDCLASS wc = { 0 };
+	wc.lpfnWndProc = DefWindowProc;
+	wc.hInstance = GetModuleHandle(NULL);
+	wc.lpszClassName = "GLEWTestWindowClass";
+	RegisterClassA(&wc);
+
+	HWND hWnd = CreateWindowExA(
+		0,
+		"GLEWTestWindowClass",
+		"GLEW Test",
+		WS_OVERLAPPEDWINDOW,
+		0, 0, 1, 1,
+		NULL, NULL, GetModuleHandle(NULL), NULL
+		);
+	ShowWindow(hWnd, SW_HIDE);
+
+	hDC = GetDC(hWnd);
+
+	PIXELFORMATDESCRIPTOR pfd = { 0 };
+	pfd.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+	pfd.nVersion = 1;
+	pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+	pfd.iPixelType = PFD_TYPE_RGBA;
+	pfd.cColorBits = 24;
+	pfd.cDepthBits = 16;
+
+	int pixelFormat = ChoosePixelFormat(hDC, &pfd);
+	SetPixelFormat(hDC, pixelFormat, &pfd);
+
+	hRC = wglCreateContext(hDC);
+	wglMakeCurrent(hDC, hRC);
+
+	return hRC;
+}
+
+void releaseOpenGLContext(HDC hDC, HGLRC hRC, HWND hWnd) {
+	wglMakeCurrent(NULL, NULL);
+	wglDeleteContext(hRC);
+	ReleaseDC(hWnd, hDC);
+	DestroyWindow(hWnd);
+	UnregisterClassA("GLEWTestWindowClass", GetModuleHandle(NULL));
+}
+
+int main() {
+	std::cout << "=== VS2013 纯 GLEW 2.3.1 测试（无 GLFW/GLUT）===" << std::endl;
+
+	HDC hDC;
+	HGLRC hRC;
+	HWND hWnd = NULL;
+
+	std::cout << "1. 创建 Windows OpenGL 上下文..." << std::endl;
+	hRC = createOpenGLContext(hDC, hRC);
+	if (!hRC) {
+		std::cerr << "错误：创建 OpenGL 上下文失败！" << std::endl;
+		return -1;
+	}
+
+	std::cout << "2. 初始化 GLEW 2.3.1..." << std::endl;
+	glewExperimental = GL_TRUE;
+	GLenum glewStatus = glewInit();
+
+	if (glewStatus != GLEW_OK) {
+		std::cerr << "? GLEW 2.3.1 初始化失败：" << glewGetErrorString(glewStatus) << std::endl;
+		releaseOpenGLContext(hDC, hRC, hWnd);
+		return -1;
+	}
+	std::cout << "? GLEW 2.3.1 初始化成功！" << std::endl;
+
+	std::cout << "\n3. 验证 GLEW 函数加载：" << std::endl;
+	std::cout << "   - GLEW 版本：" << glewGetString(GLEW_VERSION) << std::endl;
+	std::cout << "   - OpenGL 版本：" << glGetString(GL_VERSION) << std::endl;
+	std::cout << "   - GLSL 版本：" << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+
+	if (GLEW_VERSION_3_3) {
+		std::cout << "   ? 支持 OpenGL 3.3（GLEW 已加载对应函数）" << std::endl;
+	}
+	else {
+		std::cout << "   ??  不支持 OpenGL 3.3（仅验证 GLEW 本身，不影响测试）" << std::endl;
+	}
+
+	if (glCreateShader != nullptr) {
+		std::cout << "   ? glCreateShader 函数加载成功" << std::endl;
+	}
+	else {
+		std::cerr << "   ? glCreateShader 函数加载失败" << std::endl;
+	}
+
+	if (glGenVertexArrays != nullptr) {
+		std::cout << "   ? glGenVertexArrays 函数加载成功" << std::endl;
+	}
+	else {
+		std::cerr << "   ? glGenVertexArrays 函数加载失败" << std::endl;
+	}
+
+	std::cout << "\n4. 释放资源，测试完成！" << std::endl;
+	releaseOpenGLContext(hDC, hRC, hWnd);
+	Sleep(1000000);
+	return 0;
+}
